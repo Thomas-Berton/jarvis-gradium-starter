@@ -1,0 +1,11 @@
+.env
+.venv/
+venv/
+__pycache__/
+.jarvis-state.json
+
+# Le dossier de travail de l'agent : on ne versionne que sa config
+workspace/*
+!workspace/.claude/
+!workspace/CLAUDE.md
+workspace/.claude/settings.local.json

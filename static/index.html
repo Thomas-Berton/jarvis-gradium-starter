@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>JARVIS x Gradium</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%2359d4fc'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #05070d; --panel: #0b101c; --line: #18223a; --line2: #22304f;
+    --accent: #59d4fc; --accent2: #9e6bfa; --text: #dfe9ff; --dim: #6b7ea3;
+    --ok: #39d98a; --err: #ff6b6b; --warn: #ffc857;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(1200px 700px at 40% 35%, #0a1224 0%, var(--bg) 60%);
+    color: var(--text); font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    height: 100vh; overflow: hidden; display: flex;
+  }
+  button, select, input {
+    font: inherit; font-size: 12px; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line2); border-radius: 8px; padding: 6px 10px;
+  }
+  button { cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled, select:disabled { opacity: .45; cursor: default; }
+
+  /* ---------------------------------------------------------------- scène */
+  #stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; min-width: 0; padding: 16px; }
+  #top { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #top label { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--dim); cursor: pointer; }
+  #top .spacer { flex: 1; }
+  #checks { position: absolute; top: 58px; left: 16px; font-size: 12px; line-height: 1.7; color: var(--warn); }
+
+  #orbWrap { position: relative; width: min(44vh, 380px, 80vw); aspect-ratio: 1; cursor: pointer; }
+  #orb { width: 100%; height: 100%; display: block; }
+  #orbWrap.nowebgl { border-radius: 50%; background: radial-gradient(circle at 40% 35%, #dff4ff, var(--accent) 40%, #142a5a 75%); }
+  #status { margin-top: 20px; letter-spacing: .3em; text-transform: uppercase; font-size: 12px; color: var(--dim); text-align: center; }
+  #status b { color: var(--accent); font-weight: 600; }
+  #status.error b { color: var(--err); }
+
+  #transcript { width: min(680px, 100%); margin-top: 22px; max-height: 24vh; overflow-y: auto; font-size: 14px; line-height: 1.5; text-align: center; }
+  .line { margin: 4px 0; }
+  .line.user { color: #9fb4e0; }
+  .line.user::before { content: "Toi  "; color: var(--dim); font-size: 11px; letter-spacing: .15em; }
+  .line.jarvis::before { content: "JARVIS  "; color: var(--accent); font-size: 11px; letter-spacing: .15em; }
+
+  #say { width: min(520px, 100%); margin-top: 14px; display: flex; gap: 8px; }
+  #say input { flex: 1; }
+
+  /* ---------------------------------------------------------------- panneau */
+  #side { width: 380px; border-left: 1px solid var(--line); background: rgba(11,16,28,.85); backdrop-filter: blur(8px); display: flex; flex-direction: column; min-height: 0; }
+  #sideHead { padding: 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+  #sideHead h2 { flex: 1; font-size: 11px; letter-spacing: .25em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+  #agentName { color: var(--accent); }
+  #feed { flex: 1; overflow-y: auto; padding: 14px 16px; }
+  #empty { font-size: 12px; color: var(--dim); font-style: italic; }
+
+  .perm { border: 1px solid var(--warn); border-radius: 10px; padding: 12px; margin-bottom: 12px; background: rgba(255,200,87,.06); animation: pop .25s ease; }
+  .perm .t { font-size: 12px; color: var(--warn); margin-bottom: 6px; font-weight: 600; }
+  .perm pre { font-size: 11px; white-space: pre-wrap; word-break: break-all; color: var(--text); background: rgba(0,0,0,.3); padding: 8px; border-radius: 6px; max-height: 120px; overflow: auto; }
+  .perm .b { display: flex; gap: 8px; margin-top: 10px; }
+  .perm .allow { border-color: var(--ok); color: var(--ok); }
+  .perm .deny { border-color: var(--err); color: var(--err); }
+
+  .turn { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; background: linear-gradient(180deg, rgba(89,212,252,.05), transparent); animation: pop .25s ease; }
+  @keyframes pop { from { transform: translateY(6px); opacity: 0; } }
+  .turn .q { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .turn .s { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 8px; }
+  .turn ul { list-style: none; margin-top: 8px; }
+  .turn li { font-size: 11px; color: #a9bcdf; display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
+  .turn li .n { color: var(--accent2); flex-shrink: 0; }
+  .turn li .l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .turn .r { font-size: 12px; color: var(--text); margin-top: 8px; white-space: pre-wrap; max-height: 160px; overflow: auto; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; animation: blink 1s infinite alternate; }
+  .done > .dot, .dot.done { background: var(--ok); animation: none; }
+  .error > .dot, .dot.error { background: var(--err); animation: none; }
+  @keyframes blink { to { opacity: .25; } }
+
+  @media (max-width: 860px) {
+    body { flex-direction: column; overflow: auto; height: auto; min-height: 100vh; }
+    #side { width: 100%; border-left: 0; border-top: 1px solid var(--line); min-height: 40vh; }
+    #stage { padding-top: 110px; }
+  }
+</style>
+</head>
+<body>
+  <main id="stage">
+    <div id="top">
+      <select id="voice" title="Voix de Jarvis"></select>
+      <label title="Laisse coché si tu n'as pas de casque"><input type="checkbox" id="echo" checked> Anti-écho</label>
+      <span class="spacer"></span>
+      <button id="stopBtn" title="Arrête la tâche en cours (ou dis « stop »)">Stop</button>
+      <button id="resetBtn" title="Jarvis oublie la conversation">Nouvelle conversation</button>
+    </div>
+    <div id="checks"></div>
+
+    <div id="orbWrap" title="Clique pour démarrer / arrêter"><canvas id="orb"></canvas></div>
+    <div id="status">clique l'orbe pour <b>démarrer</b></div>
+    <div id="transcript"></div>
+    <form id="say" autocomplete="off">
+      <input id="sayText" placeholder="… ou écris à Jarvis" disabled>
+      <button id="sayBtn" disabled>Envoyer</button>
+    </form>
+  </main>
+
+  <aside id="side">
+    <div id="sideHead"><h2>Activité · <span id="agentName">agent</span></h2></div>
+    <div id="feed">
+      <div id="perms"></div>
+      <div id="turns"><div id="empty">Aucune tâche pour l'instant. Parle à Jarvis.</div></div>
+    </div>
+  </aside>
+
+<script type="module">
+// Orbe : AI-Orb de Nick Vyhouski (MIT), https://github.com/weeeha/AI-Orb
+import { OrbRenderer } from "./static/vendor/ai-orb/renderer.mjs";
+
+const $ = (id) => document.getElementById(id);
+const statusEl = $("status"), transcriptEl = $("transcript"), turnsEl = $("turns"), permsEl = $("perms");
+
+let ws = null, ctx = null, mic = null, micStream = null, player = null;
+let running = false, busy = false, playing = false;
+let inLevel = 0, outLevel = 0;
+
+function setStatus(html, isError = false) {
+  statusEl.innerHTML = html;
+  statusEl.className = isError ? "error" : "";
+}
+
+/* ------------------------------------------------------------ orbe */
+const orb = new OrbRenderer($("orb"), {
+  finish: "aurora", field: "dark", state: "idle",
+  colors: { stops: ["#2a85f5", "#59d4fc", "#9e6bfa"], body: "#07080e" },
+  grain: 0.05, seed: 0, speed: 1, still: false,
+}, { getInputLevel: () => inLevel, getOutputLevel: () => outLevel });
+if (orb.supported) orb.start(); else $("orbWrap").classList.add("nowebgl");
+
+function refreshOrb() {
+  const state = !running ? "idle" : playing ? "speaking" : busy ? "thinking" : "listening";
+  orb.update({ state });
+  if (running && !statusEl.classList.contains("error")) {
+    setStatus({ speaking: "jarvis <b>parle</b>", thinking: "jarvis <b>travaille</b>",
+                listening: "je t'<b>écoute</b>" }[state]);
+  }
+}
+
+/* ------------------------------------------------------------ config */
+async function loadInfo() {
+  try {
+    const info = await fetch("api/info").then((r) => r.json());
+    $("agentName").textContent = info.agent;
+    for (const v of info.voices) {
+      const o = new Option(v.name, v.voice_id, false, v.voice_id === info.default_voice_id);
+      $("voice").add(o);
+    }
+    const c = info.checks, lines = [];
+    if (!c.gradium_key) lines.push("Clé Gradium manquante : GRADIUM_API_KEY dans .env");
+    if (!c.agent_cli) lines.push(`Commande « ${c.agent_cli_name} » introuvable : installe l'agent`);
+    $("checks").innerHTML = "";
+    for (const l of lines) { const d = document.createElement("div"); d.textContent = l; $("checks").append(d); }
+  } catch (e) {
+    $("checks").textContent = `Serveur injoignable : ${e.message}`;
+  }
+}
+
+/* ------------------------------------------------------------ transcription */
+let userLine = null, jarvisLine = null;
+
+function addLine(role, text) {
+  const div = document.createElement("div");
+  div.className = `line ${role}`;
+  div.textContent = text;
+  transcriptEl.append(div);
+  while (transcriptEl.children.length > 40) transcriptEl.firstChild.remove();
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  return div;
+}
+
+function userText(text) {
+  if (!userLine) { userLine = addLine("user", ""); jarvisLine = null; }
+  userLine.textContent += (userLine.textContent ? " " : "") + text;
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+}
+
+function jarvisText(text) {
+  if (!jarvisLine) { jarvisLine = addLine("jarvis", ""); userLine = null; }
+  jarvisLine.textContent += text;
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+}
+
+/* ------------------------------------------------------------ panneau d'activité */
+const cards = {};
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function renderTurn(turn) {
+  if (!turn) return;
+  $("empty")?.remove();
+  let card = cards[turn.id];
+  if (!card) {
+    card = cards[turn.id] = el("div", "turn");
+    turnsEl.prepend(card);
+  }
+  card._turn = turn;
+  card.replaceChildren();
+  card.append(el("div", "q", turn.prompt));
+  const s = el("div", `s ${turn.status}`);
+  s.append(el("span", "dot"), el("span", "lbl"));
+  card.append(s);
+  if (turn.steps.length) {
+    const ul = el("ul");
+    for (const st of turn.steps) {
+      const li = el("li");
+      li.append(el("span", `dot ${st.status}`), el("span", "n", st.tool), el("span", "l", st.label));
+      ul.append(li);
+    }
+    card.append(ul);
+  }
+  if (turn.reply) card.append(el("div", "r", turn.reply.trim()));
+  tick(card);
+}
+
+function tick(card) {
+  const t = card._turn;
+  const end = t.ended || Date.now() / 1000;
+  const secs = Math.max(0, Math.round(end - t.started));
+  const label = { running: "en cours", done: "terminé", error: "erreur" }[t.status] || t.status;
+  const n = t.steps.length;
+  card.querySelector(".lbl").textContent = `${label} · ${secs} s${n ? ` · ${n} action${n > 1 ? "s" : ""}` : ""}`;
+}
+setInterval(() => Object.values(cards).forEach(tick), 1000);
+
+function showPermission(ev) {
+  const card = el("div", "perm");
+  card.id = `perm-${ev.tool_id}`;
+  card.append(el("div", "t", `Autoriser « ${ev.tool_name} » ?`), el("pre", "", ev.text || ev.tool_name));
+  const b = el("div", "b");
+  const yes = el("button", "allow", "Autoriser"), no = el("button", "deny", "Refuser");
+  yes.onclick = () => send({ type: "permission", id: ev.tool_id, allow: true });
+  no.onclick = () => send({ type: "permission", id: ev.tool_id, allow: false });
+  b.append(yes, no);
+  card.append(b);
+  permsEl.append(card);
+}
+
+/* ------------------------------------------------------------ messages du serveur */
+function onServerMessage(msg) {
+  switch (msg.type) {
+    case "hello":
+      busy = msg.busy;
+      for (const t of msg.activity) renderTurn(t);
+      break;
+    case "transcript": userText(msg.text); break;
+    case "turn_end": userLine = null; break;
+    case "clear_audio": player?.port.postMessage("clear"); playing = false; break;
+    case "agent":
+      busy = msg.busy;
+      renderTurn(msg.turn);
+      if (msg.event === "text_delta") jarvisText(msg.text);
+      if (msg.event === "text_break" || msg.event === "turn_done") jarvisLine = null;
+      if (msg.event === "permission_request") showPermission(msg);
+      break;
+    case "permission_answered": $(`perm-${msg.id}`)?.remove(); break;
+    case "reset":
+      turnsEl.replaceChildren(Object.assign(el("div", "", "Nouvelle conversation. Parle à Jarvis."), { id: "empty" }));
+      permsEl.replaceChildren();
+      for (const k in cards) delete cards[k];
+      transcriptEl.replaceChildren(); userLine = jarvisLine = null;
+      break;
+    case "error":
+      console.error(msg.message);
+      setStatus(`<b></b>`, true);
+      statusEl.querySelector("b").textContent = msg.message.split("\n")[0];
+      setTimeout(() => { statusEl.classList.remove("error"); refreshOrb(); }, 6000);
+      break;
+  }
+  refreshOrb();
+}
+
+function send(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+/* ------------------------------------------------------------ session vocale */
+async function start() {
+  setStatus("connexion…");
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: $("echo").checked, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch (e) {
+    setStatus("<b>micro refusé</b>", true);
+    return;
+  }
+  ctx = new AudioContext();
+  await ctx.audioWorklet.addModule("static/audio-worklet.js");
+  mic = new AudioWorkletNode(ctx, "mic");
+  player = new AudioWorkletNode(ctx, "player", { outputChannelCount: [2] });
+  ctx.createMediaStreamSource(micStream).connect(mic);
+  player.connect(ctx.destination);
+
+  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  ws.binaryType = "arraybuffer";
+
+  mic.port.onmessage = (e) => {
+    inLevel = Math.min(1, e.data.level * 6);
+    if (running && ws.readyState === WebSocket.OPEN) ws.send(e.data.pcm);
+  };
+  player.port.onmessage = (e) => {
+    outLevel = Math.min(1, e.data.level * 4);
+    if (playing !== e.data.playing) { playing = e.data.playing; refreshOrb(); }
+  };
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: "start", voice_id: $("voice").value }));
+    running = true;
+    for (const id of ["voice", "echo"]) $(id).disabled = true;
+    for (const id of ["sayText", "sayBtn"]) $(id).disabled = false;
+    refreshOrb();
+  };
+  ws.onmessage = (ev) => {
+    if (typeof ev.data === "string") onServerMessage(JSON.parse(ev.data));
+    else player.port.postMessage(ev.data, [ev.data]);
+  };
+  ws.onclose = (ev) => {
+    const was = running;
+    cleanup();
+    if (ev.code === 4000) setStatus(`<b>${ev.reason}</b>`, true);
+    else if (ev.code === 4003) setStatus("<b>connexion refusée (origine)</b>", true);
+    else if (was) setStatus("session <b>terminée</b>");
+  };
+}
+
+function stop() {
+  ws?.close();
+  cleanup();
+  setStatus("clique l'orbe pour <b>démarrer</b>");
+}
+
+function cleanup() {
+  running = false; playing = false; inLevel = outLevel = 0; ws = null;
+  micStream?.getTracks().forEach((t) => t.stop());
+  ctx?.close();
+  ctx = mic = player = micStream = null;
+  for (const id of ["voice", "echo"]) $(id).disabled = false;
+  for (const id of ["sayText", "sayBtn"]) $(id).disabled = true;
+  refreshOrb();
+}
+
+$("orbWrap").onclick = () => (running ? stop() : start());
+$("stopBtn").onclick = () => send({ type: "interrupt" });
+$("resetBtn").onclick = () => {
+  if (confirm("Jarvis va oublier toute la conversation. Continuer ?")) send({ type: "reset" });
+};
+$("say").onsubmit = (e) => {
+  e.preventDefault();
+  const text = $("sayText").value.trim();
+  if (!text) return;
+  userText(text); userLine = null;
+  send({ type: "say", text });
+  $("sayText").value = "";
+};
+loadInfo();
+</script>
+</body>
+</html>
